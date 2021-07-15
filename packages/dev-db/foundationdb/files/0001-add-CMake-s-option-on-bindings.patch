@@ -1,0 +1,190 @@
+From 03d1d230500b583630249bb75e78e4ec2694b1a9 Mon Sep 17 00:00:00 2001
+From: Pierre Zemb <pierre.zemb@clever-cloud.com>
+Date: Mon, 2 Aug 2021 11:25:43 +0200
+Subject: [PATCH] add CMake's option for bindings
+
+---
+ CMakeLists.txt            |  4 +-
+ bindings/CMakeLists.txt   |  8 ++--
+ cmake/FDBComponents.cmake | 88 +++++++++++++++++++++++++++------------
+ 3 files changed, 68 insertions(+), 32 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index cfae5bcf0..6d4b6347c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -164,9 +164,7 @@ endif()
+ add_subdirectory(fdbbackup)
+ add_subdirectory(contrib)
+ add_subdirectory(tests)
+-if(WITH_PYTHON)
+-  add_subdirectory(bindings)
+-endif()
++add_subdirectory(bindings)
+ if(WITH_DOCUMENTATION)
+   add_subdirectory(documentation)
+ endif()
+diff --git a/bindings/CMakeLists.txt b/bindings/CMakeLists.txt
+index e363695ac..700e4071f 100644
+--- a/bindings/CMakeLists.txt
++++ b/bindings/CMakeLists.txt
+@@ -1,9 +1,11 @@
+-add_subdirectory(c)
+-if(NOT OPEN_FOR_IDE)
++if(NOT OPEN_FOR_IDE AND WITH_C)
+   # flow bindings currently doesn't support that
++  add_subdirectory(c)
+   add_subdirectory(flow)
+ endif()
+-add_subdirectory(python)
++if(WITH_PYTHON)
++  add_subdirectory(python)
++endif()
+ if(WITH_JAVA)
+   add_subdirectory(java)
+ endif()
+diff --git a/cmake/FDBComponents.cmake b/cmake/FDBComponents.cmake
+index ec26c07dd..a69de2e68 100644
+--- a/cmake/FDBComponents.cmake
++++ b/cmake/FDBComponents.cmake
+@@ -45,36 +45,58 @@ endif()
+ # Java Bindings
+ ################################################################################
+ 
+-set(WITH_JAVA OFF)
+-find_package(JNI 1.8)
+-find_package(Java 1.8 COMPONENTS Development)
+-# leave FreeBSD JVM compat for later
+-if(JNI_FOUND AND Java_FOUND AND Java_Development_FOUND AND NOT (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD"))
+-  set(WITH_JAVA ON)
+-  include(UseJava)
+-  enable_language(Java)
++option(BUILD_JAVA_BINDING "build java binding" ON)
++if(NOT BUILD_JAVA_BINDING)
++  set(WITH_JAVA OFF)
+ else()
+   set(WITH_JAVA OFF)
++  find_package(JNI 1.8)
++  find_package(Java 1.8 COMPONENTS Development)
++  # leave FreeBSD JVM compat for later
++  if(JNI_FOUND AND Java_FOUND AND Java_Development_FOUND AND NOT (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD"))
++    set(WITH_JAVA ON)
++    include(UseJava)
++    enable_language(Java)
++  else()
++    set(WITH_JAVA OFF)
++  endif()
+ endif()
+ 
+ ################################################################################
+ # Python Bindings
+ ################################################################################
+ 
+-find_package(Python COMPONENTS Interpreter)
+-if(Python_Interpreter_FOUND)
+-  set(WITH_PYTHON ON)
+-else()
+-  #message(FATAL_ERROR "Could not found a suitable python interpreter")
++option(BUILD_PYTHON_BINDING "build python binding" ON)
++if(NOT BUILD_PYTHON_BINDING)
+   set(WITH_PYTHON OFF)
++else()
++  find_package(Python COMPONENTS Interpreter)
++  if(Python_Interpreter_FOUND)
++    set(WITH_PYTHON ON)
++  else()
++    #message(FATAL_ERROR "Could not found a suitable python interpreter")
++    set(WITH_PYTHON OFF)
++  endif()
++endif()
++
++################################################################################
++# C Bindings
++################################################################################
++
++option(BUILD_C_BINDING "build C binding" ON)
++if(NOT BUILD_C_BINDING AND NOT WITH_PYTHON)
++  set(WITH_C OFF)
++else()
++  set(WITH_C ON)
+ endif()
+ 
+ ################################################################################
+ # Pip
+ ################################################################################
+ 
++option(BUILD_DOCUMENTATION "build documentation" ON)
+ find_package(Python3 COMPONENTS Interpreter)
+-if (Python3_Interpreter_FOUND)
++if (BUILD_DOCUMENTATION AND Python3_Interpreter_FOUND)
+   set(WITH_DOCUMENTATION ON)
+ else()
+   set(WITH_DOCUMENTATION OFF)
+@@ -84,23 +106,37 @@ endif()
+ # GO
+ ################################################################################
+ 
+-find_program(GO_EXECUTABLE go)
+-# building the go binaries is currently not supported on Windows
+-if(GO_EXECUTABLE AND NOT WIN32)
+-  set(WITH_GO ON)
+-else()
++option(BUILD_GO_BINDING "build go binding" ON)
++if(NOT BUILD_GO_BINDING)
+   set(WITH_GO OFF)
++else()
++  find_program(GO_EXECUTABLE go)
++  # building the go binaries is currently not supported on Windows
++  if(GO_EXECUTABLE AND NOT WIN32)
++    set(WITH_GO ON)
++  else()
++    set(WITH_GO OFF)
++  endif()
++  if (USE_SANITIZER)
++    # Disable building go for sanitizers, since _stacktester doesn't link properly
++    set(WITH_GO OFF)
++  endif()
+ endif()
+ 
+ ################################################################################
+ # Ruby
+ ################################################################################
+ 
+-find_program(GEM_EXECUTABLE gem)
+-set(WITH_RUBY OFF)
+-if(GEM_EXECUTABLE)
+-  set(GEM_COMMAND ${RUBY_EXECUTABLE} ${GEM_EXECUTABLE})
+-  set(WITH_RUBY ON)
++option(BUILD_RUBY_BINDING "build ruby binding" ON)
++if(NOT BUILD_RUBY_BINDING)
++  set(WITH_RUBY OFF)
++else()
++  find_program(GEM_EXECUTABLE gem)
++  set(WITH_RUBY OFF)
++  if(GEM_EXECUTABLE)
++    set(GEM_COMMAND ${RUBY_EXECUTABLE} ${GEM_EXECUTABLE})
++    set(WITH_RUBY ON)
++  endif()
+ endif()
+ 
+ ################################################################################
+@@ -131,14 +167,14 @@ function(print_components)
+   message(STATUS "Build Ruby bindings:                  ${WITH_RUBY}")
+   message(STATUS "Build Python sdist (make package):    ${WITH_PYTHON}")
+   message(STATUS "Build Documentation (make html):      ${WITH_DOCUMENTATION}")
+-  message(STATUS "Build Bindings (depends on Python):   ${WITH_PYTHON}")
++  message(STATUS "Build C Bindings (depends on Python): ${WITH_C}")
+   message(STATUS "Configure CTest (depends on Python):  ${WITH_PYTHON}")
+   message(STATUS "Build with RocksDB:                   ${WITH_ROCKSDB_EXPERIMENTAL}")
+   message(STATUS "=========================================")
+ endfunction()
+ 
+ if(FORCE_ALL_COMPONENTS)
+-  if(NOT WITH_JAVA OR NOT WITH_TLS OR NOT WITH_GO OR NOT WITH_RUBY OR NOT WITH_PYTHON OR NOT WITH_DOCUMENTATION)
++  if(NOT WITH_C OR NOT WITH_JAVA OR NOT WITH_TLS OR NOT WITH_GO OR NOT WITH_RUBY OR NOT WITH_PYTHON OR NOT WITH_DOCUMENTATION)
+     print_components()
+     message(FATAL_ERROR "FORCE_ALL_COMPONENTS is set but not all dependencies could be found")
+   endif()
+-- 
+2.32.0
+

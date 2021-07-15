@@ -1,0 +1,6 @@
+# Copyright 2021 Pierre Zemb <pierre.zemb@clever-cloud.com>
+# Distributed under the terms of the GNU General Public License v2
+
+require foundationdb github [ user="PierreZ" branch="test_fdb_7" force_git_clone=true ]
+
+SLOT="7.0"

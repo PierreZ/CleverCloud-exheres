@@ -1,0 +1,62 @@
+# Copyright 2021 Pierre Zemb <pierre.zemb@clever-cloud.com>
+# Distributed under the terms of the GNU General Public License v2
+
+SUMMARY="FoundationDB gives you the power of ACID transactions in a distributed database."
+HOMEPAGE="https://www.foundationdb.org/"
+DOWNLOADS=""
+
+LICENCES="Apache-2.0"
+PLATFORMS="~amd64"
+MYOPTIONS=""
+
+DEPENDENCIES="
+    build:
+        dev-lang/clang
+        app-arch/zstd
+        dev-libs/openssl
+        dev-lang/mono
+"
+
+SLOT="$(ever range 1-2)"
+
+require github cmake [ ninja=true out_of_source=true ]
+
+# skip tests for now
+RESTRICT="test"
+
+CMAKE_SRC_CONFIGURE_PARAMS=(
+    -DSSD_ROCKSDB_EXPERIMENTAL:BOOL=FALSE
+    -DBUILD_JAVA_BINDING:BOOL=FALSE
+    -DBUILD_RUBY_BINDING:BOOL=FALSE
+    -DBUILD_PYTHON_BINDING:BOOL=TRUE # needed
+    -DBUILD_C_BINDING:BOOL=TRUE
+    -DBUILD_GO_BINDING:BOOL=FALSE
+)
+
+export_exlib_phases src_prepare src_configure src_install
+
+foundationdb_src_prepare() {
+    cmake_src_prepare
+    edo sed -e "s/set(strip_command strip)/set(strip_command $(exhost --tool-prefix)strip)/" -i "../${PN}-${PV}/cmake/FlowCommands.cmake"
+}
+
+foundationdb_src_configure() {
+
+    esandbox disable_net
+
+    # will need to download googlebenchmark
+    cmake_src_configure 
+
+    if ever at_least 7; then
+        edo ninja boost_targetProject-prefix/src/boost_targetProject-stamp/boost_targetProject-download
+        edo sed -e "s/pkg-config/\/usr\/x86_64-pc-linux-gnu\/bin\/pkg-config/g" -i "boost_targetProject-prefix/src/boost_targetProject/bootstrap.sh"
+        edo ninja doctest/src/doctest-stamp/doctest-download
+        edo ninja toml11Project-prefix/src/toml11Project-stamp/toml11Project-download
+    fi
+    esandbox enable_net
+}
+
+foundationdb_src_install() {
+    echo "$PWD"
+    exit 1
+}
