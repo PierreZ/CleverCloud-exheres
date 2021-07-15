@@ -1,0 +1,44 @@
+# Copyright 2021 Pierre Zemb <pierre.zemb@clever-cloud.com>
+# Distributed under the terms of the GNU General Public License v2
+
+require github [ user="apple" tag="${PV}" force_git_clone=true ]
+require cmake [ ninja=true ]
+
+SUMMARY="FoundationDB gives you the power of ACID transactions in a distributed database."
+HOMEPAGE="https://www.foundationdb.org/"
+DOWNLOADS=""
+
+LICENCES="Apache-2.0"
+SLOT="0"
+PLATFORMS="~amd64"
+MYOPTIONS="
+"
+
+DEPENDENCIES="
+    build:
+        sys-devel/gcc:8
+        app-arch/zstd
+        dev-libs/openssl
+        dev-lang/mono
+"
+
+DEFAULT_SRC_PREPARE_PATCHES=(
+    "${FILES}"/0001-add-CMake-s-option-on-bindings.patch
+)
+
+# skip tests for now
+RESTRICT="test"
+
+CMAKE_SRC_CONFIGURE_PARAMS=(
+    -DSSD_ROCKSDB_EXPERIMENTAL:BOOL=FALSE
+    -DBUILD_JAVA_BINDING:BOOL=FALSE
+    -DBUILD_RUBY_BINDING:BOOL=FALSE
+    -DBUILD_PYTHON_BINDING:BOOL=FALSE
+    -DBUILD_GO_BINDING:BOOL=FALSE
+)
+
+src_prepare() {
+    edo sed -e "s/set(strip_command strip)/set(strip_command $(exhost --tool-prefix)strip)/" -i "../${PN}-${PV}/cmake/FlowCommands.cmake"
+    cmake_src_prepare
+}
+
